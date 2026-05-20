@@ -7,6 +7,7 @@ const meetingMetric=require('../models/meetingMetrics');
 const meetingTasks=require('../models/meetingTasks');
 const User=require('../models/users');
 const axios=require('axios');
+const submissionQueue=require('../utils/queue');
 
 async function uploadAndProcessFile(req,res){
     const meetingId=req.body.meetingId;
@@ -14,10 +15,8 @@ async function uploadAndProcessFile(req,res){
     const file=req.file;
     const userId=req.user.id;
     
-
+    // 1. Upload audio to storage (fast operation)
     const uploadFile=await uploadAudioFile(file,userId);
-
-
 
     if(uploadFile.status!='success'){
         return sendErrorResponse(
@@ -28,45 +27,35 @@ async function uploadAndProcessFile(req,res){
         )
     }
 
-    
-
-    // Placeholder for processing logic (e.g., transcription, summarization)
-
-    const processFile=await meetingServices.processAudioFile(file,userId)
-
-    if(processFile.status!='success'){  
-        return sendErrorResponse(
-            res,
-            {},
-            "Error processing file",
-            STATUS_CODE.SERVER_ERROR
-        )
-    }
-
+    // 2. Update meeting with audio path + set status to 'pending'
     await meeting.findByIdAndUpdate(meetingId,{
-        audioFilePath:uploadFile.data.fullPath,
-        textFilePath:processFile.data.textFile.fullPath
+        audioFilePath: uploadFile.data.fullPath,
+        MomStatus: 'pending'
     });
 
-    const textFile=await getSignedUrl(processFile.data.textFile.path);
+    // 3. Enqueue heavy processing (transcription + analysis + MoM) to background worker
+    await submissionQueue.add('process-audio', {
+         meetingId,
+         userId,
+         fileBuffer: Array.from(file.buffer),  // serialize buffer for Redis
+         originalname: file.originalname,
+         mimetype: file.mimetype,
+         audioFilePath: uploadFile.data.fullPath,
+    });
 
-     sendSuccessResponse(
+    // 4. Return immediately — worker handles the rest
+    return sendSuccessResponse(
         res,
-        {audioFile:uploadFile.data,textFile},
-        "File uploaded and processed successfully",
+        { meetingId, momStatus: 'pending' },
+        "File uploaded successfully. Processing started in background.",
         STATUS_CODE.SUCCESS
     )
 
-    meetingServices.performBackgroundAnalysis(meetingId, processFile.data.transcript)
-            .catch(err => {
-                console.error(`Background Task Failed for Meeting ${meetingId}:`, err);
-            });
-
     }catch(err){
-        console.log(err)
+      console.log(err)
       await meeting.findByIdAndUpdate(meetingId, {
-        MomStatus: 'processing'
-      });
+        MomStatus: 'failed'
+      }).catch(() => {});
               
         return sendErrorResponse(
             res,

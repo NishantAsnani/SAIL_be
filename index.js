@@ -6,11 +6,13 @@ const PORT=process.env.PORT || 3000;
 const cors=require('cors')
 const routes=require('./routes/index')
 const bodyParser=require('body-parser')
+const dbconnection=require('./db');
 
-const {dbconnection} = require('./db')
 
 
-dbconnection();
+(async ()=>{
+  await dbconnection()
+})();
 
 
 app.use(cors());

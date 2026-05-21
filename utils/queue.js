@@ -12,5 +12,4 @@ const submissionQueue=new Queue('submission-queue',{connection});
 
 
 
-module.exports=submissionQueue;
-module.exports.connection=connection;
+module.exports={submissionQueue,connection};

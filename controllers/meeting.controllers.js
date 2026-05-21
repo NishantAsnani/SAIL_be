@@ -7,7 +7,7 @@ const meetingMetric=require('../models/meetingMetrics');
 const meetingTasks=require('../models/meetingTasks');
 const User=require('../models/users');
 const axios=require('axios');
-const submissionQueue=require('../utils/queue');
+const {submissionQueue}=require('../utils/queue');
 
 async function uploadAndProcessFile(req,res){
     const meetingId=req.body.meetingId;
